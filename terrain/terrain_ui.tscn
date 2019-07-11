@@ -1,0 +1,199 @@
+[gd_scene load_steps=2 format=2]
+
+[ext_resource path="res://terrain/terrain_ui.gd" type="Script" id=1]
+
+[node name="terrain_ui" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource( 1 )
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+margin_right = 205.0
+margin_bottom = 55.0
+
+[node name="octaves" type="HBoxContainer" parent="VBoxContainer"]
+editor/display_folded = true
+margin_right = 205.0
+margin_bottom = 16.0
+size_flags_horizontal = 3
+
+[node name="title" type="Label" parent="VBoxContainer/octaves"]
+margin_top = 1.0
+margin_right = 80.0
+margin_bottom = 15.0
+rect_min_size = Vector2( 80, 0 )
+size_flags_horizontal = 3
+text = "octaves"
+
+[node name="value" type="Label" parent="VBoxContainer/octaves"]
+margin_left = 84.0
+margin_top = 1.0
+margin_right = 141.0
+margin_bottom = 15.0
+size_flags_horizontal = 3
+
+[node name="slider" type="HSlider" parent="VBoxContainer/octaves"]
+margin_left = 145.0
+margin_right = 205.0
+margin_bottom = 16.0
+rect_min_size = Vector2( 60, 0 )
+size_flags_horizontal = 3
+max_value = 10.0
+
+[node name="persistence" type="HBoxContainer" parent="VBoxContainer"]
+editor/display_folded = true
+margin_top = 20.0
+margin_right = 205.0
+margin_bottom = 36.0
+size_flags_horizontal = 3
+
+[node name="title" type="Label" parent="VBoxContainer/persistence"]
+margin_top = 1.0
+margin_right = 80.0
+margin_bottom = 15.0
+rect_min_size = Vector2( 80, 0 )
+size_flags_horizontal = 3
+text = "persistence"
+
+[node name="value" type="Label" parent="VBoxContainer/persistence"]
+margin_left = 84.0
+margin_top = 1.0
+margin_right = 141.0
+margin_bottom = 15.0
+size_flags_horizontal = 3
+
+[node name="slider" type="HSlider" parent="VBoxContainer/persistence"]
+margin_left = 145.0
+margin_right = 205.0
+margin_bottom = 16.0
+rect_min_size = Vector2( 60, 0 )
+size_flags_horizontal = 3
+max_value = 1.0
+step = 0.05
+
+[node name="period" type="HBoxContainer" parent="VBoxContainer"]
+editor/display_folded = true
+margin_top = 40.0
+margin_right = 205.0
+margin_bottom = 56.0
+size_flags_horizontal = 3
+
+[node name="title" type="Label" parent="VBoxContainer/period"]
+margin_top = 1.0
+margin_right = 80.0
+margin_bottom = 15.0
+rect_min_size = Vector2( 80, 0 )
+size_flags_horizontal = 3
+text = "period"
+
+[node name="value" type="Label" parent="VBoxContainer/period"]
+margin_left = 84.0
+margin_top = 1.0
+margin_right = 141.0
+margin_bottom = 15.0
+size_flags_horizontal = 3
+
+[node name="slider" type="HSlider" parent="VBoxContainer/period"]
+margin_left = 145.0
+margin_right = 205.0
+margin_bottom = 16.0
+rect_min_size = Vector2( 60, 0 )
+size_flags_horizontal = 3
+min_value = 1.0
+value = 1.0
+
+[node name="lacunarity" type="HBoxContainer" parent="VBoxContainer"]
+margin_top = 60.0
+margin_right = 205.0
+margin_bottom = 76.0
+size_flags_horizontal = 3
+
+[node name="title" type="Label" parent="VBoxContainer/lacunarity"]
+margin_top = 1.0
+margin_right = 80.0
+margin_bottom = 15.0
+rect_min_size = Vector2( 80, 0 )
+size_flags_horizontal = 3
+text = "lacunarity"
+
+[node name="value" type="Label" parent="VBoxContainer/lacunarity"]
+margin_left = 84.0
+margin_top = 1.0
+margin_right = 141.0
+margin_bottom = 15.0
+size_flags_horizontal = 3
+
+[node name="slider" type="HSlider" parent="VBoxContainer/lacunarity"]
+margin_left = 145.0
+margin_right = 205.0
+margin_bottom = 16.0
+rect_min_size = Vector2( 60, 0 )
+size_flags_horizontal = 3
+max_value = 50.0
+
+[node name="water_level" type="HBoxContainer" parent="VBoxContainer"]
+margin_top = 80.0
+margin_right = 205.0
+margin_bottom = 96.0
+size_flags_horizontal = 3
+
+[node name="title" type="Label" parent="VBoxContainer/water_level"]
+margin_top = 1.0
+margin_right = 80.0
+margin_bottom = 15.0
+rect_min_size = Vector2( 80, 0 )
+size_flags_horizontal = 3
+text = "water_level"
+
+[node name="value" type="Label" parent="VBoxContainer/water_level"]
+margin_left = 84.0
+margin_top = 1.0
+margin_right = 141.0
+margin_bottom = 15.0
+size_flags_horizontal = 3
+
+[node name="slider" type="HSlider" parent="VBoxContainer/water_level"]
+margin_left = 145.0
+margin_right = 205.0
+margin_bottom = 16.0
+rect_min_size = Vector2( 60, 0 )
+size_flags_horizontal = 3
+min_value = -1.0
+max_value = 1.0
+step = 0.01
+
+[node name="power" type="HBoxContainer" parent="VBoxContainer"]
+margin_top = 100.0
+margin_right = 205.0
+margin_bottom = 116.0
+size_flags_horizontal = 3
+
+[node name="title" type="Label" parent="VBoxContainer/power"]
+margin_top = 1.0
+margin_right = 80.0
+margin_bottom = 15.0
+rect_min_size = Vector2( 80, 0 )
+size_flags_horizontal = 3
+text = "power"
+
+[node name="value" type="Label" parent="VBoxContainer/power"]
+margin_left = 84.0
+margin_top = 1.0
+margin_right = 141.0
+margin_bottom = 15.0
+size_flags_horizontal = 3
+
+[node name="slider" type="HSlider" parent="VBoxContainer/power"]
+margin_left = 145.0
+margin_right = 205.0
+margin_bottom = 16.0
+rect_min_size = Vector2( 60, 0 )
+size_flags_horizontal = 3
+max_value = 5.0
+step = 0.001
+[connection signal="value_changed" from="VBoxContainer/octaves/slider" to="." method="_on_octaves_value_changed"]
+[connection signal="value_changed" from="VBoxContainer/persistence/slider" to="." method="_on_persistence_value_changed"]
+[connection signal="value_changed" from="VBoxContainer/period/slider" to="." method="_on_period_value_changed"]
+[connection signal="value_changed" from="VBoxContainer/lacunarity/slider" to="." method="_on_lacunarity_value_changed"]
+[connection signal="value_changed" from="VBoxContainer/water_level/slider" to="." method="_on_water_value_changed"]
+[connection signal="value_changed" from="VBoxContainer/power/slider" to="." method="_on_power_value_changed"]
