@@ -2,12 +2,13 @@ tool
 extends Spatial
 
 ## GENERATION ##
+export var gen = false
 export var regenerate = false
 var noise : OpenSimplexNoise
 var image : Image
 export var graine : int
 var _graine : int
-export var quad_count = 100.0
+export var quad_count = 100
 export var map_size = 100.0
 
 ## EROSION ##
@@ -28,10 +29,12 @@ var heightmap
 
 func _ready():
 	generate()
+	print("====================================================")
+	edit_mesh()
 
 func _process(delta):
-	if regenerate:
-		regenerate = false
+	if gen:
+		gen = false
 		generate()
 
 func generate():
@@ -42,20 +45,40 @@ func generate():
 	noise.octaves = $terrain_ui.octaves
 	noise.period = $terrain_ui.period * quad_count/map_size
 	noise.persistence = $terrain_ui.persistence
-	print("Generating height map...")
+
+	var time_before = OS.get_ticks_msec()
 	heightmap = get_basic_heightmap()
-	print("Simulating erosion...")
+	var time_after =  OS.get_ticks_msec()
+	print("heightmap generated : " + str(time_after-time_before)+"ms")
+
+	time_before = OS.get_ticks_msec()
 	erode(iterations)
-	#draw_noise()
-	print("Drawing texture...")
+	time_after =  OS.get_ticks_msec()
+	print("simulated erosion : " + str(time_after-time_before)+"ms")
+
+#	draw_noise()
+
+	if not $mesh.mesh or regenerate :
+		time_before = OS.get_ticks_msec()
+		create_mesh()
+		time_after =  OS.get_ticks_msec()
+		print("mesh created : " + str(time_after-time_before)+"ms")
+	else :
+		time_before = OS.get_ticks_msec()
+		edit_mesh()
+		time_after =  OS.get_ticks_msec()
+		print("mesh modified : " + str(time_after-time_before)+"ms")
+
+	time_before = OS.get_ticks_msec()
 	draw_texture()
-	print("Creating mesh...")
-	draw_mesh()
+	time_after =  OS.get_ticks_msec()
+	print("created texture : "+str(time_after-time_before)+"ms")
+
 
 func get_basic_heightmap():
 	var heightmap = []
-	for x in range(quad_count):
-		for y in range(quad_count):
+	for x in range(quad_count+1):
+		for y in range(quad_count+1):
 			var val = noise.get_noise_2d(x, y)
 			if val > 0:
 				pass
@@ -66,16 +89,15 @@ func get_basic_heightmap():
 
 func erode(iterations = 1):
 	var min_slope = -0.01
-	var max_lifetime = 30
+	var max_lifetime = 15
 	var start_speed = 1.0
 	var start_water = 1.0
 	var inertia = 0.05
-	var evaporation = 0.1
-	var erosion = 0.5
-	var deposition = 0.5
+	var evaporation = 0.01
+	var erosion = 0.3
+	var deposition = 0.3
 	var gravity = 4.0
 	var capacity_factor = 4.0
-
 
 	var radius = 3
 
@@ -83,38 +105,45 @@ func erode(iterations = 1):
 	var max_d = 0
 
 	for i in range(iterations):
-		var position = Vector2(rand_range(0.0, quad_count - 1), rand_range(0.0, quad_count - 1))
+		var position = Vector2(rand_range(0.0, quad_count), rand_range(0.0, quad_count))
 		var speed = start_speed
 		var movement : Vector2
 		var water = start_water
 		var sediment = 0.0
-
+		
+#		print (position)
+		
 		for lifetime in range(max_lifetime):
 			var h = get_gradient(position)
 			var gradient = Vector2(h.x, h.y)
 			var height = h.z
-			# Le faire bouger
 			movement.x = movement.x * inertia - gradient.x * (1 - inertia)
 			movement.y = movement.y * inertia - gradient.y * (1 - inertia)
 
 			position += movement.normalized()
-
-			if movement.length() <= 0 or position.x < 0 or position.y < 0 or position.x > quad_count - 1 or position.y > quad_count - 1:
+			
+#			print("moving " + str(movement.normalized()))
+			
+			if position.x < 0 or position.y < 0 or position.x > quad_count - 1 or position.y > quad_count - 1:
 				break
 
 			var new_height = get_gradient(position).z
 			var delta = new_height - height
+#			print(str(delta))
 			if delta < -1 or delta > 1 :
 				breakpoint
-			var carry_capacity = max(-delta * speed * water * capacity_factor, 0.01)
-
-
+				
+			var carry_capacity = max(-delta * speed * water * capacity_factor, 0.001)
+			
+#			print("sed "+ str(sediment) + "/" + str( carry_capacity))
+			
 			if delta > 0 or sediment > carry_capacity :
+				
 				var x = position.x - int(position.x)
 				var y = position.y - int(position.y)
 				var amount_to_drop = 0
 				if delta > 0:
-					amount_to_drop = min(delta, sediment)
+					amount_to_drop = min(abs(delta), sediment)
 				else:
 					amount_to_drop = (sediment - carry_capacity) * deposition
 
@@ -128,19 +157,24 @@ func erode(iterations = 1):
 				heightmap[coord_to_linear(position.x+1, position.y)] += amount_to_drop * (1-x) * y
 				heightmap[coord_to_linear(position.x+1, position.y + 1)] += amount_to_drop * (1-x) * (1-y)
 				sediment -= amount_to_drop
-
+				
+#				print("dropped " + str(amount_to_drop) +" at " + str(position))
+				
 			else : # Moving downhill
+				
 				var amount_to_grab = min((carry_capacity-sediment) * erosion, -delta)
 				sediment += grab_sediment(position, radius, amount_to_grab)
+#				print("grabbed " + str(amount_to_grab) + " from " + str(position))
 				if amount_to_grab < 0:
 					breakpoint
 				if amount_to_grab > max_g:
 					max_g = amount_to_grab
 			speed = sqrt( speed * speed + gravity * delta)
 			water *= (1 - evaporation)
+#			print("===")
 
-	print ("g : " + str(max_g))
-	print ("d : " + str(max_d))
+#	print ("g : " + str(max_g))
+#	print ("d : " + str(max_d))
 
 func get_gradient(position : Vector2):
 
@@ -251,13 +285,17 @@ func draw_texture():
 	texture.create_from_image(image, 0)
 	$map.texture = texture
 
+	var mat = SpatialMaterial.new()
+	mat.albedo_texture = $map.texture
+	$mesh.material_override = mat
+
 func draw_noise():
 	image = Image.new()
 	image.create(quad_count, quad_count, false,  Image.FORMAT_RGB8)
 	image.lock()
 	for x in range(quad_count):
 		for y in range(quad_count):
-			var val = inverse_lerp(-1, 1, heightmap[coord_to_linear(x,y)])
+			var val =  heightmap[coord_to_linear(x,y)]
 			var color = Color(val, val, val)
 			image.set_pixel(x, y, color)
 	image.unlock()
@@ -265,25 +303,37 @@ func draw_noise():
 	texture.create_from_image(image, 0)
 	$map.texture = texture
 
-func draw_mesh():
+func create_mesh():
 	var st = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.add_smooth_group(true)
-	for x in range(quad_count-1):
-		for y in range(quad_count-1):
+	for x in range(quad_count):
+		for y in range(quad_count):
 			add_quad(st, x, y)
 	st.index()
 	st.generate_normals()
-	var mat = SpatialMaterial.new()
-	mat.albedo_texture = $map.texture
+	
+	$mesh.mesh = st.commit()
+	
+func edit_mesh():
+	var mdt = MeshDataTool.new()
+	mdt.create_from_surface($mesh.mesh, 0)
+	for i in range(mdt.get_vertex_count()):
+		var v = mdt.get_vertex(i)
+		var x = v.x / map_size * (quad_count-1)
+		x = round(x)
+		var y = v.z / map_size * (quad_count-1)
+		y = round(y)
+		
+		var height = heightmap[coord_to_linear(x,y)] * mesh_mult
+		
+		v.y = float(height)
+		mdt.set_vertex(i, v)
+	
+	$mesh.mesh.surface_remove(0)
+	mdt.commit_to_surface($mesh.mesh)
 
-	var mesh = Mesh.new()
-
-	st.commit(mesh)
-	$mesh.mesh = mesh
-	$mesh.material_override = mat
-
-func add_quad(st : SurfaceTool, x, y):
+func add_quad(st, x, y):
 	add_vert(st, x, y)
 	add_vert(st, x+1, y)
 	add_vert(st, x+1, y+1)
@@ -292,24 +342,21 @@ func add_quad(st : SurfaceTool, x, y):
 	add_vert(st, x+1, y+1)
 	add_vert(st, x, y+1)
 
-func add_vert(st : SurfaceTool, x, y):
-	st.add_uv(Vector2(float(x)/float(quad_count), float(y)/float(quad_count)))
-	var height = heightmap[coord_to_linear(x,y)]*mesh_mult
-	st.add_vertex(Vector3(float(x)*(map_size/quad_count), height, float(y)*(map_size/quad_count)))
+func add_vert(st, x, y):
+	var uv = Vector2(float(x)/(quad_count-1), float(y)/(quad_count-1))
+	st.add_uv(uv)
+	
+	var i = coord_to_linear(x,y)
+	var height = heightmap[i] * mesh_mult
+	st.add_vertex(Vector3(uv.x * map_size, height, uv.y * map_size))
+	#print(str(x) + " " + str(y) + " " + str(height))
 
-func _on_ui_value_changed():
-	generate()
 
-func linear_to_vector2(position : int):
-	return Vector2(position % quad_count, position / quad_count)
+#func linear_to_vector2(position : int):
+#	return Vector2(position % (quad_count+1), position / quad_count+1)
 
 func vector2_to_linear(position : Vector2) -> int:
-	return int(position.x) * quad_count + int(position.y)
+	return int(position.x) * (quad_count+1) + int(position.y)
 
-func coord_to_linear(x, y):
-	return int(x) * quad_count + int(y)
-
-func rand_next():
-	var rand = rand_seed(_graine)
-	_graine = rand[1]
-	return rand[0]
+func coord_to_linear(x : int, y : int):
+	return int(x) * (quad_count+1) + int(y)
