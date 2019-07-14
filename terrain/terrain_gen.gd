@@ -3,7 +3,9 @@ extends Spatial
 
 ## GENERATION ##
 export var gen = false
+export var erode = false
 export var regenerate = false
+export var draw_debug = false
 var noise : OpenSimplexNoise
 var image : Image
 export var graine : int
@@ -13,6 +15,7 @@ export var map_size = 100.0
 
 ## EROSION ##
 export var iterations : int
+var amount_of_iterations_done = 0
 
 ## MESH ##
 export var mesh_mult : float
@@ -33,9 +36,20 @@ func _ready():
 	edit_mesh()
 
 func _process(delta):
-	if gen:
-		gen = false
-		generate()
+	if not Engine.editor_hint and amount_of_iterations_done < iterations:
+		erode()
+		edit_mesh()
+		amount_of_iterations_done += 1
+		$terrain_ui/iterations.text = str(amount_of_iterations_done)
+		#OS.delay_msec(1)
+	else : 
+		if gen:
+			gen = false
+			generate()
+		if erode:
+			erode = false
+			erode(iterations)
+			edit_mesh()
 
 func generate():
 	noise = OpenSimplexNoise.new()
@@ -45,7 +59,11 @@ func generate():
 	noise.octaves = $terrain_ui.octaves
 	noise.period = $terrain_ui.period * quad_count/map_size
 	noise.persistence = $terrain_ui.persistence
-
+	
+	for child in get_children():
+		if child.name.begins_with("Mesh"):
+			child.queue_free()
+	
 	var time_before = OS.get_ticks_msec()
 	heightmap = get_basic_heightmap()
 	var time_after =  OS.get_ticks_msec()
@@ -70,7 +88,7 @@ func generate():
 		print("mesh modified : " + str(time_after-time_before)+"ms")
 
 	time_before = OS.get_ticks_msec()
-	draw_texture()
+#	draw_texture()
 	time_after =  OS.get_ticks_msec()
 	print("created texture : "+str(time_after-time_before)+"ms")
 
@@ -90,7 +108,7 @@ func get_basic_heightmap():
 func erode(iterations = 1):
 	var min_slope = -0.01
 	var max_lifetime = 15
-	var start_speed = 1.0
+	var start_speed = 0.5
 	var start_water = 1.0
 	var inertia = 0.05
 	var evaporation = 0.01
@@ -111,9 +129,10 @@ func erode(iterations = 1):
 		var water = start_water
 		var sediment = 0.0
 		
-#		print (position)
+		instantiate_marker_sphere(position)
 		
 		for lifetime in range(max_lifetime):
+			
 			var h = get_gradient(position)
 			var gradient = Vector2(h.x, h.y)
 			var height = h.z
@@ -171,10 +190,27 @@ func erode(iterations = 1):
 					max_g = amount_to_grab
 			speed = sqrt( speed * speed + gravity * delta)
 			water *= (1 - evaporation)
-#			print("===")
+			
+		instantiate_marker_sphere(position, true)
+
 
 #	print ("g : " + str(max_g))
 #	print ("d : " + str(max_d))
+
+func instantiate_marker_sphere(position : Vector2, red = false):
+	if draw_debug:
+		var mi = MeshInstance.new()
+		mi.mesh = SphereMesh.new()
+		
+		if red:
+			var material = SpatialMaterial.new()
+			material.albedo_color = Color.red
+			mi.material_override = material
+		
+		add_child(mi)
+		var v = Vector3(position.x, get_gradient(position).z * mesh_mult, position.y)
+		print(str(v))
+		mi.translate(v)
 
 func get_gradient(position : Vector2):
 
@@ -201,7 +237,7 @@ func get_gradient(position : Vector2):
 	#print_debug("grad x : " + str(gradient_x))
 	var height_y_pos = (no_height + ne_height ) / 2.0
 	var height_y_neg = (so_height + se_height ) / 2.0
-	var gradient_y = lerp(so_height, se_height, x) - lerp(no_height, ne_height, x)
+	var gradient_y = lerp(no_height, ne_height, x) - lerp(so_height, se_height, x)
 	#print_debug("grad y : " + str(gradient_y))
 
 	var height = no_height * (1-x) * y + ne_height * (1-x) * (1-y) + so_height * x * y + se_height * x * (1-y)
