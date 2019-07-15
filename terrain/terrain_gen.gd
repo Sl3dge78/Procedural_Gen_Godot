@@ -127,7 +127,7 @@ func erode(iterations = 1):
 	var inertia = 0.05
 	
 	var sediment_capacity_factor = 4
-	var min_sediment_capacity = 0.0
+	var min_sediment_capacity = 0.03
 	
 	var gravity = 4
 	var evaporation = 0.01
@@ -144,6 +144,9 @@ func erode(iterations = 1):
 		
 		instantiate_marker_sphere(Vector2(pos_x, pos_y), Color(0, 0, 1))
 		
+		if iteration > 90:
+			breakpoint
+		
 		for lifetime in range(max_lifetime):
 			var coord_x = int(pos_x)
 			var coord_y = int(pos_y)
@@ -155,7 +158,7 @@ func erode(iterations = 1):
 			var height = h.z
 			var gradient_x = h.x
 			var gradient_y = h.y
-			print(height)
+#			print(height)
 			
 			
 			# Calculate new position
@@ -175,19 +178,22 @@ func erode(iterations = 1):
 #			print(sediment)
 #			print(sediment_capacity)
 			
-			
 			instantiate_marker_sphere(Vector2(pos_x, pos_y), Color(0, inverse_lerp(0, sediment_capacity, sediment), 0))
 			
 			if sediment > sediment_capacity or delta_height > 0 :
 				# Drop
 				var amount_to_deposit = min(delta_height, sediment) if delta_height > 0 else (sediment - sediment_capacity) * deposit_speed
 #				print("d" + str(amount_to_deposit))
-				sediment -= deposit_sediment(pos_x, pos_y, amount_to_deposit)
+				sediment -= amount_to_deposit
+				deposit_sediment(pos_x, pos_y, amount_to_deposit)
 			else :
 				# Erode
 				var amount_to_erode = min(-delta_height, (sediment_capacity - sediment) * erode_speed)
 #				print("e" + str(amount_to_erode))
-				sediment += erode_sediment(pos_x, pos_y, amount_to_erode)
+				sediment += amount_to_erode
+				if amount_to_erode < 0:
+					breakpoint
+				erode_sediment(pos_x, pos_y, amount_to_erode)
 			
 			print("")
 			speed = sqrt(speed * speed + delta_height * gravity)
@@ -228,21 +234,21 @@ func deposit_sediment(pos_x, pos_y, amount_to_deposit):
 	var coord_y = int(pos_y)
 	var offset_x = pos_x - coord_x
 	var offset_y = pos_y - coord_y
-	
+
 	heightmap[coord_to_linear(coord_x, coord_y)] += amount_to_deposit * (1-offset_x) * (1-offset_y) 
 	heightmap[coord_to_linear(coord_x, coord_y + 1)] += amount_to_deposit * (1-offset_x) * (offset_y) 
 	heightmap[coord_to_linear(coord_x+1, coord_y)] += amount_to_deposit * (offset_x) * (1-offset_y) 
 	heightmap[coord_to_linear(coord_x+1, coord_y + 1)] += amount_to_deposit * (offset_x) * (offset_y) 
 	
-#	var oo = inverse_lerp(0, amount_to_deposit, amount_to_deposit * (1-offset_x) * (1-offset_y))
-#	var oi = inverse_lerp(0, amount_to_deposit, amount_to_deposit * (1-offset_x) * (offset_y))
-#	var io = inverse_lerp(0, amount_to_deposit, amount_to_deposit * (offset_x) * (1-offset_y))
-#	var ii = inverse_lerp(0, amount_to_deposit, amount_to_deposit * (offset_x) * (offset_y))
-#
-#	instantiate_marker_sphere(Vector2(coord_x, coord_y), Color(oo,oo,oo), 0.15)
-#	instantiate_marker_sphere(Vector2(coord_x, coord_y + 1), Color(oi,oi,oi), 0.15)
-#	instantiate_marker_sphere(Vector2(coord_x + 1, coord_y), Color(io,io,io), 0.15)
-#	instantiate_marker_sphere(Vector2(coord_x + 1, coord_y + 1), Color(ii,ii,ii), 0.15)
+	var oo = inverse_lerp(0, amount_to_deposit, amount_to_deposit * (1-offset_x) * (1-offset_y))
+	var oi = inverse_lerp(0, amount_to_deposit, amount_to_deposit * (1-offset_x) * (offset_y))
+	var io = inverse_lerp(0, amount_to_deposit, amount_to_deposit * (offset_x) * (1-offset_y))
+	var ii = inverse_lerp(0, amount_to_deposit, amount_to_deposit * (offset_x) * (offset_y))
+
+	instantiate_marker_sphere(Vector2(coord_x, coord_y), Color(oo,oo,oo), 0.15)
+	instantiate_marker_sphere(Vector2(coord_x, coord_y + 1), Color(oi,oi,oi), 0.15)
+	instantiate_marker_sphere(Vector2(coord_x + 1, coord_y), Color(io,io,io), 0.15)
+	instantiate_marker_sphere(Vector2(coord_x + 1, coord_y + 1), Color(ii,ii,ii), 0.15)
 	
 	return amount_to_deposit
 
@@ -252,8 +258,8 @@ func erode_sediment(pos_x, pos_y, amount_to_erode):
 	var all_weights = sum_of_weights[i]
 
 	for j in brush_indexes[i]:
-		var distance = Vector2(pos_x, pos_y).distance_to(linear_to_vector2(j))
-		var weight = (brush_radius - distance)/all_weights
+		var distance = Vector2(int(pos_x), int(pos_y)).distance_to(linear_to_vector2(j))
+		var weight = (1 - (distance/brush_radius))/all_weights
 		var weighted_amount = amount_to_erode * weight
 		var delta_sediment = heightmap[i] if heightmap[i] < weighted_amount else weighted_amount
 		heightmap[i] -= delta_sediment
@@ -278,7 +284,7 @@ func init_erosion(radius):
 					continue
 					
 				brush_indexes[i].append(coord_to_linear(x,y))
-				total_weights += max(0, radius - distance)
+				total_weights += 1 - (distance/radius)
 		
 		sum_of_weights.append(total_weights)
 
