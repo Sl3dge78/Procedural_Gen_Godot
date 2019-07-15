@@ -6,6 +6,7 @@ export var gen = false
 export var erode = false
 export var regenerate = false
 export var draw_debug = false
+export var clear_debug = false
 var noise : OpenSimplexNoise
 var image : Image
 export var graine : int
@@ -16,6 +17,11 @@ export var map_size = 100.0
 ## EROSION ##
 export var iterations : int
 var amount_of_iterations_done = 0
+
+export var brush_radius = 3
+
+var sum_of_weights = []
+var brush_indexes = []
 
 ## MESH ##
 export var mesh_mult : float
@@ -36,12 +42,13 @@ func _ready():
 	edit_mesh()
 
 func _process(delta):
-	if not Engine.editor_hint and amount_of_iterations_done < iterations:
-		erode()
+	if not Engine.editor_hint:
+		erode(1000)
 		edit_mesh()
+		draw_noise()
 		amount_of_iterations_done += 1
-		$terrain_ui/iterations.text = str(amount_of_iterations_done)
-		#OS.delay_msec(1)
+		$terrain_ui/iterations.text = str(amount_of_iterations_done) +"k"
+
 	else : 
 		if gen:
 			gen = false
@@ -50,6 +57,15 @@ func _process(delta):
 			erode = false
 			erode(iterations)
 			edit_mesh()
+			draw_noise()
+		if clear_debug:
+			clear_debug()
+			clear_debug = false
+
+func clear_debug():
+	for child in get_children():
+		if child.name.begins_with("Mesh"):
+			child.queue_free()
 
 func generate():
 	noise = OpenSimplexNoise.new()
@@ -60,9 +76,7 @@ func generate():
 	noise.period = $terrain_ui.period * quad_count/map_size
 	noise.persistence = $terrain_ui.persistence
 	
-	for child in get_children():
-		if child.name.begins_with("Mesh"):
-			child.queue_free()
+	clear_debug()
 	
 	var time_before = OS.get_ticks_msec()
 	heightmap = get_basic_heightmap()
@@ -70,11 +84,11 @@ func generate():
 	print("heightmap generated : " + str(time_after-time_before)+"ms")
 
 	time_before = OS.get_ticks_msec()
+	init_erosion(brush_radius)
 	erode(iterations)
 	time_after =  OS.get_ticks_msec()
 	print("simulated erosion : " + str(time_after-time_before)+"ms")
 
-#	draw_noise()
 
 	if not $mesh.mesh or regenerate :
 		time_before = OS.get_ticks_msec()
@@ -89,9 +103,9 @@ func generate():
 
 	time_before = OS.get_ticks_msec()
 #	draw_texture()
+	draw_noise()
 	time_after =  OS.get_ticks_msec()
 	print("created texture : "+str(time_after-time_before)+"ms")
-
 
 func get_basic_heightmap():
 	var heightmap = []
@@ -106,192 +120,168 @@ func get_basic_heightmap():
 	return heightmap
 
 func erode(iterations = 1):
-	var min_slope = -0.01
-	var max_lifetime = 15
-	var start_speed = 0.5
-	var start_water = 1.0
+	
+	clear_debug()
+	
+	var max_lifetime = 30
 	var inertia = 0.05
+	
+	var sediment_capacity_factor = 4
+	var min_sediment_capacity = 0.0
+	
+	var gravity = 4
 	var evaporation = 0.01
-	var erosion = 0.3
-	var deposition = 0.3
-	var gravity = 4.0
-	var capacity_factor = 4.0
-
-	var radius = 3
-
-	var max_g = 0
-	var max_d = 0
-
-	for i in range(iterations):
-		var position = Vector2(rand_range(0.0, quad_count), rand_range(0.0, quad_count))
-		var speed = start_speed
-		var movement : Vector2
-		var water = start_water
-		var sediment = 0.0
+	
+	for iteration in range(iterations):
+		var pos_x = rand_range(0.0, quad_count)
+		var pos_y = rand_range(0.0, quad_count)
+		var dir = Vector2(0, 0)
+		var speed = 1
+		var water = 1
+		var sediment = 0
+		var deposit_speed = 0.3
+		var erode_speed = 0.3
 		
-		instantiate_marker_sphere(position)
+		instantiate_marker_sphere(Vector2(pos_x, pos_y), Color(0, 0, 1))
 		
 		for lifetime in range(max_lifetime):
+			var coord_x = int(pos_x)
+			var coord_y = int(pos_y)
+			var offset_x = pos_x - coord_x
+			var offset_y = pos_y - coord_y
 			
-			var h = get_gradient(position)
-			var gradient = Vector2(h.x, h.y)
+			# Get current height and gradients
+			var h = get_gradient(pos_x, pos_y)
 			var height = h.z
-			movement.x = movement.x * inertia - gradient.x * (1 - inertia)
-			movement.y = movement.y * inertia - gradient.y * (1 - inertia)
-
-			position += movement.normalized()
+			var gradient_x = h.x
+			var gradient_y = h.y
 			
-#			print("moving " + str(movement.normalized()))
+			# Calculate new position
+			dir.x = (dir.x * inertia - gradient_x * (1 - inertia))
+			dir.y = (dir.y * inertia - gradient_y * (1 - inertia))
+			dir = dir.normalized()
+			pos_x += dir.x
+			pos_y += dir.y
 			
-			if position.x < 0 or position.y < 0 or position.x > quad_count - 1 or position.y > quad_count - 1:
+			# Out of bounds
+			if(pos_x < 0 or pos_y < 0 or pos_x > quad_count - 1 or pos_y > quad_count - 1):
 				break
-
-			var new_height = get_gradient(position).z
-			var delta = new_height - height
-#			print(str(delta))
-			if delta < -1 or delta > 1 :
-				breakpoint
-				
-			var carry_capacity = max(-delta * speed * water * capacity_factor, 0.001)
 			
-#			print("sed "+ str(sediment) + "/" + str( carry_capacity))
+			var new_height = get_gradient(pos_x, pos_y).z
+			var delta_height = new_height - height
+			var sediment_capacity = max(-delta_height * speed * water * sediment_capacity_factor, min_sediment_capacity)
+			instantiate_marker_sphere(Vector2(pos_x, pos_y), Color(0, inverse_lerp(0, sediment_capacity, sediment), 0))
 			
-			if delta > 0 or sediment > carry_capacity :
+			if sediment > sediment_capacity or delta_height > 0 :
+				# Drop
+				var amount_to_deposit = min(delta_height, sediment) if delta_height > 0 else (sediment - sediment_capacity) * deposit_speed
+				sediment -= deposit_sediment(pos_x, pos_y, amount_to_deposit)
+			else :
+				# Erode
+				var amount_to_erode = min(-delta_height, (sediment_capacity - sediment) * erode_speed)
+				sediment += erode_sediment(pos_x, pos_y, amount_to_erode)
 				
-				var x = position.x - int(position.x)
-				var y = position.y - int(position.y)
-				var amount_to_drop = 0
-				if delta > 0:
-					amount_to_drop = min(abs(delta), sediment)
-				else:
-					amount_to_drop = (sediment - carry_capacity) * deposition
-
-				if amount_to_drop < -0.00001:
-					breakpoint
-				if amount_to_drop > max_d:
-					max_d = amount_to_drop
-
-				heightmap[vector2_to_linear(position)] += amount_to_drop * x * y
-				heightmap[coord_to_linear(position.x, position.y + 1)] += amount_to_drop * x * (1-y)
-				heightmap[coord_to_linear(position.x+1, position.y)] += amount_to_drop * (1-x) * y
-				heightmap[coord_to_linear(position.x+1, position.y + 1)] += amount_to_drop * (1-x) * (1-y)
-				sediment -= amount_to_drop
-				
-#				print("dropped " + str(amount_to_drop) +" at " + str(position))
-				
-			else : # Moving downhill
-				
-				var amount_to_grab = min((carry_capacity-sediment) * erosion, -delta)
-				sediment += grab_sediment(position, radius, amount_to_grab)
-#				print("grabbed " + str(amount_to_grab) + " from " + str(position))
-				if amount_to_grab < 0:
-					breakpoint
-				if amount_to_grab > max_g:
-					max_g = amount_to_grab
-			speed = sqrt( speed * speed + gravity * delta)
-			water *= (1 - evaporation)
-			
-		instantiate_marker_sphere(position, true)
+			speed = sqrt(speed * speed + delta_height * gravity)
+			water -= 1 * evaporation
+		
+		instantiate_marker_sphere(Vector2(pos_x, pos_y), Color(1, 0, 0))
 
 
-#	print ("g : " + str(max_g))
-#	print ("d : " + str(max_d))
+func get_gradient(pos_x, pos_y):
 
-func instantiate_marker_sphere(position : Vector2, red = false):
+	var coord_x = int(pos_x)
+	var coord_y = int(pos_y)
+
+	var offset_x = pos_x - coord_x
+	var offset_y = pos_y - coord_y
+
+	var no_height = heightmap[coord_to_linear(coord_x, coord_y+1)]
+	var ne_height = heightmap[coord_to_linear(coord_x+1, coord_y+1)]
+	var so_height = heightmap[coord_to_linear(coord_x, coord_y)]
+	var se_height = heightmap[coord_to_linear(coord_x+1, coord_y)]
+	
+#	var gradient_x = (ne_height - no_height) * (offset_y) + (se_height - so_height) * (1-offset_y)	
+#	var gradient_y = (no_height - so_height) * (offset_x) + (ne_height - se_height) * (1-offset_x)
+
+	var gradient_x = lerp(ne_height, se_height, offset_y) - lerp(no_height, so_height, offset_y) 
+	var gradient_y = lerp(ne_height, no_height, offset_x) - lerp(se_height, so_height, offset_x)
+
+	var height = blerp(so_height, se_height, no_height, ne_height, offset_x, offset_y)
+	return Vector3(gradient_x, gradient_y, height)
+
+func deposit_sediment(pos_x, pos_y, amount_to_deposit):
+	var coord_x = int(pos_x)
+	var coord_y = int(pos_y)
+	var offset_x = pos_x - coord_x
+	var offset_y = pos_y - coord_y
+	
+	heightmap[coord_to_linear(coord_x, coord_y)] += amount_to_deposit * (1-offset_x) * (1-offset_y) 
+	heightmap[coord_to_linear(coord_x, coord_y + 1)] += amount_to_deposit * (1-offset_x) * (offset_y) 
+	heightmap[coord_to_linear(coord_x+1, coord_y)] += amount_to_deposit * (offset_x) * (1-offset_y) 
+	heightmap[coord_to_linear(coord_x+1, coord_y + 1)] += amount_to_deposit * (offset_x) * (offset_y) 
+	
+#	var oo = inverse_lerp(0, amount_to_deposit, amount_to_deposit * (1-offset_x) * (1-offset_y))
+#	var oi = inverse_lerp(0, amount_to_deposit, amount_to_deposit * (1-offset_x) * (offset_y))
+#	var io = inverse_lerp(0, amount_to_deposit, amount_to_deposit * (offset_x) * (1-offset_y))
+#	var ii = inverse_lerp(0, amount_to_deposit, amount_to_deposit * (offset_x) * (offset_y))
+#
+#	instantiate_marker_sphere(Vector2(coord_x, coord_y), Color(oo,oo,oo), 0.15)
+#	instantiate_marker_sphere(Vector2(coord_x, coord_y + 1), Color(oi,oi,oi), 0.15)
+#	instantiate_marker_sphere(Vector2(coord_x + 1, coord_y), Color(io,io,io), 0.15)
+#	instantiate_marker_sphere(Vector2(coord_x + 1, coord_y + 1), Color(ii,ii,ii), 0.15)
+	
+	return amount_to_deposit
+
+func erode_sediment(pos_x, pos_y, amount_to_erode):
+	var sediment_grabbed = 0.0
+	var i = coord_to_linear(pos_x, pos_y)
+	var all_weights = sum_of_weights[i]
+
+	for j in brush_indexes[i]:
+		var distance = Vector2(pos_x, pos_y).distance_to(linear_to_vector2(j))
+		var weight = max(0, brush_radius - distance)/all_weights
+		var weighted_amount = amount_to_erode * weight
+		var delta_sediment =  heightmap[i] if heightmap[i] < weighted_amount else weighted_amount
+		heightmap[i] -= delta_sediment
+		sediment_grabbed += delta_sediment
+		instantiate_marker_sphere(linear_to_vector2(j), Color(weight,0,0), 0.15)
+	
+	return sediment_grabbed
+
+func init_erosion(radius):
+	print("initializing erosion")
+	sum_of_weights = []
+	brush_indexes = []
+	for i in range(quad_count * quad_count):
+		var position = linear_to_vector2(i)
+		var total_weights = 0.0
+		brush_indexes.append([])
+
+		for x in range(int(max(position.x - radius, 0)), int(min(position.x + radius, quad_count))):
+			for y in range (int(max(position.y - radius, 0)), int(min(position.y + radius, quad_count))):
+				var distance = position.distance_to(Vector2(x, y))
+				if distance > radius:
+					continue
+					
+				brush_indexes[i].append(coord_to_linear(x,y))
+				total_weights += max(0, radius - distance)
+		
+		sum_of_weights.append(total_weights)
+
+func instantiate_marker_sphere(position : Vector2, color : Color, scale = 0.2):
 	if draw_debug:
 		var mi = MeshInstance.new()
 		mi.mesh = SphereMesh.new()
 		
-		if red:
-			var material = SpatialMaterial.new()
-			material.albedo_color = Color.red
-			mi.material_override = material
+		var material = SpatialMaterial.new()
+		material.albedo_color = color
+		mi.material_override = material
 		
 		add_child(mi)
-		var v = Vector3(position.x, get_gradient(position).z * mesh_mult, position.y)
-		print(str(v))
+		var v = Vector3(position.x/(quad_count-1)*map_size, get_gradient(position.x, position.y).z * mesh_mult, position.y/(quad_count-1)*map_size)
+#		print(str(v))
 		mi.translate(v)
-
-func get_gradient(position : Vector2):
-
-	var coord_x = int(position.x)
-	var coord_y = int(position.y)
-
-	var x = position.x - coord_x
-	var y = position.y - coord_y
-
-	var no_height = heightmap[coord_to_linear(coord_x, coord_y+1)]
-	#print_debug("no height : " + str(no_height))
-	var ne_height = heightmap[coord_to_linear(coord_x+1, coord_y+1)]
-	#print_debug("ne height : " + str(ne_height))
-	var so_height = heightmap[coord_to_linear(coord_x, coord_y)]
-	#print_debug("so height : " + str(so_height))
-	var se_height = heightmap[coord_to_linear(coord_x+1, coord_y)]
-	#print_debug("se height : " + str(se_height))
-	# hauteur de x+ moins hauteur de x-
-	# pour trouver la hauteur de x+ = moyenne de NE et SE ; x- NO et SE
-
-	var height_x_pos = (ne_height + se_height ) / 2.0
-	var height_x_neg = (no_height + so_height ) / 2.0
-	var gradient_x = lerp(se_height, ne_height, y) - lerp(so_height, no_height, y)
-	#print_debug("grad x : " + str(gradient_x))
-	var height_y_pos = (no_height + ne_height ) / 2.0
-	var height_y_neg = (so_height + se_height ) / 2.0
-	var gradient_y = lerp(no_height, ne_height, x) - lerp(so_height, se_height, x)
-	#print_debug("grad y : " + str(gradient_y))
-
-	var height = no_height * (1-x) * y + ne_height * (1-x) * (1-y) + so_height * x * y + se_height * x * (1-y)
-	#print(height)
-	return Vector3(gradient_x, gradient_y, height)
-
-func grab_sediment(position, radius, amount_to_grab):
-	var sediment_grabbed = 0.0
-	var all_weights = get_sum_of_weights(position, radius)
-	for x in range(int(max(position.x - radius, 0)), int(min(position.x + radius, quad_count))):
-		for y in range (int(max(position.y - radius, 0)), int(min(position.y + radius, quad_count))):
-			var distance = position.distance_to(Vector2(x, y))
-			if distance > radius:
-				continue
-			var weight = max(0, radius - distance)/all_weights
-			var amount_to_erode = amount_to_grab * weight
-			heightmap[coord_to_linear(x,y)] -= amount_to_erode
-			if heightmap[coord_to_linear(x,y)] < 0:
-				heightmap[coord_to_linear(x,y)] = 0
-				breakpoint
-			sediment_grabbed += amount_to_erode
-	return sediment_grabbed
-
-func get_sum_of_weights(position, radius):
-	var total_weights = 0.0
-	for x in range(int(max(position.x - radius, 0)), int(min(position.x + radius, quad_count))):
-		for y in range (int(max(position.y - radius, 0)), int(min(position.y + radius, quad_count))):
-			var distance = position.distance_to(Vector2(x, y))
-			if distance > radius:
-				continue
-			total_weights += max(0, radius - distance)
-	return total_weights
-
-func get_adjacent_tiles(position):
-	var ret = []
-	if position.x > 0:
-		ret.append(Vector2(position.x - 1, position.y))
-	if position.x < quad_count - 1:
-		ret.append(Vector2(position.x + 1, position.y))
-	if position.y > 0 :
-		ret.append(Vector2(position.x, position.y - 1))
-	if position.y < quad_count - 1:
-		ret.append(Vector2(position.x, position.y + 1))
-
-	if position.x > 0 and position.y > 0 :
-		ret.append(Vector2(position.x - 1, position.y - 1))
-	if position.x < quad_count - 1 and position.y > 0 :
-		ret.append(Vector2(position.x + 1, position.y - 1))
-	if position.x > 0 and position.y < quad_count - 1 :
-		ret.append(Vector2(position.x - 1, position.y + 1))
-	if position.x < quad_count - 1 and position.y < quad_count - 1 :
-		ret.append(Vector2(position.x + 1, position.y + 1))
-
-	return ret
+		mi.scale_object_local(Vector3(scale, scale, scale))
 
 func draw_texture():
 	image = Image.new()
@@ -338,6 +328,10 @@ func draw_noise():
 	var texture = ImageTexture.new()
 	texture.create_from_image(image, 0)
 	$map.texture = texture
+	
+	var mat = SpatialMaterial.new()
+	mat.albedo_texture = $map.texture
+	$mesh.material_override = mat
 
 func create_mesh():
 	var st = SurfaceTool.new()
@@ -385,14 +379,16 @@ func add_vert(st, x, y):
 	var i = coord_to_linear(x,y)
 	var height = heightmap[i] * mesh_mult
 	st.add_vertex(Vector3(uv.x * map_size, height, uv.y * map_size))
-	#print(str(x) + " " + str(y) + " " + str(height))
 
+func blerp(c00, c10, c01, c11, tx, ty):
+	return lerp(lerp(c00, c10, tx), lerp(c01, c11, tx), ty)
 
-#func linear_to_vector2(position : int):
-#	return Vector2(position % (quad_count+1), position / quad_count+1)
+func linear_to_vector2(position):
+	return Vector2(position/(quad_count+1), position % (quad_count+1))
 
 func vector2_to_linear(position : Vector2) -> int:
 	return int(position.x) * (quad_count+1) + int(position.y)
 
 func coord_to_linear(x : int, y : int):
 	return int(x) * (quad_count+1) + int(y)
+
