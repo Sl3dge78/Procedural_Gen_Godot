@@ -33,6 +33,8 @@ export var evaporation = 0.01
 var sum_of_weights = []
 var brush_indexes = []
 
+var vertices_changed = []
+
 ## MESH ##
 export var mesh_mult : float
 
@@ -104,9 +106,6 @@ func get_basic_heightmap():
 ## == EROSION == ##
 
 func erode(iterations = 1):
-	
-	if iterations > 10 :
-		draw_debug = false
 	
 	for iteration in range(iterations):
 		var pos_x = rand_range(0.0, vertex_count-1)
@@ -194,7 +193,10 @@ func deposit_sediment(pos_x, pos_y, amount_to_deposit):
 	heightmap[i + vertex_count] += amount_to_deposit * (1-offset_x) * (offset_y) 
 	heightmap[i + 1] += amount_to_deposit * (offset_x) * (1-offset_y) 
 	heightmap[i + vertex_count + 1] += amount_to_deposit * (offset_x) * (offset_y) 
-	
+	vertices_changed.append(i)
+	vertices_changed.append(i + vertex_count)
+	vertices_changed.append(i + 1)
+	vertices_changed.append(i + vertex_count + 1)
 	return amount_to_deposit
 
 func erode_sediment(pos_x, pos_y, amount_to_erode):
@@ -209,6 +211,7 @@ func erode_sediment(pos_x, pos_y, amount_to_erode):
 		var delta_sediment = heightmap[i] if heightmap[i] < weighted_amount else weighted_amount
 		heightmap[i] -= delta_sediment
 		sediment_grabbed += delta_sediment
+		vertices_changed.append(i)
 	
 	return sediment_grabbed
 
@@ -312,22 +315,21 @@ func create_mesh():
 	$mesh.mesh = st.commit()
 	
 func edit_mesh():
+	
 	var mdt = MeshDataTool.new()
 	mdt.create_from_surface($mesh.mesh, 0)
-	for i in range(mdt.get_vertex_count()):
+	for i in vertices_changed:
 		var v = mdt.get_vertex(i)
-		var x = v.x / map_scale * vertex_count
-		x = round(x)
-		var y = v.z / map_scale * vertex_count
-		y = round(y)
-		
+		var x = round(v.x / map_scale * vertex_count)
+		var y = round(v.z / map_scale * vertex_count)
 		var height = heightmap[y * vertex_count + x] * mesh_mult
-		
+
 		v.y = float(height)
 		mdt.set_vertex(i, v)
-	
+
 	$mesh.mesh.surface_remove(0)
 	mdt.commit_to_surface($mesh.mesh)
+	vertices_changed = []
 
 func add_quad(st, x, y):
 	add_vert(st, x, y)
