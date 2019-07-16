@@ -296,9 +296,9 @@ func draw_noise():
 	texture.create_from_image(image, 0)
 	$map.texture = texture
 	
-	var mat = SpatialMaterial.new()
-	mat.albedo_texture = $map.texture
-	$mesh.material_override = mat
+#	var mat = SpatialMaterial.new()
+#	mat.albedo_texture = $map.texture
+#	$mesh.material_override = mat
 
 ## == MESH == ##
 
